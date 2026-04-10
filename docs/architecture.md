@@ -1,90 +1,60 @@
 # Architecture
 
-This document describes the system architecture of Python Jarvis, including component responsibilities, request flows, and key design decisions.
+Python Jarvis is a two-tier application: a Next.js Pages Router frontend talks to a FastAPI backend over HTTP. The backend owns chat orchestration and BM25 search; the frontend owns UI state, config checks, and request display.
 
 ## System Overview
-
-Python Jarvis is a two-tier application: a Next.js frontend that communicates over HTTP with a FastAPI backend. The backend integrates with the Groq cloud API for LLM inference and provides an in-memory BM25 search engine for document retrieval.
 
 ```mermaid
 graph LR
     User["Browser<br/>(localhost:3000)"]
-    Frontend["Next.js<br/>Frontend"]
-    Backend["FastAPI<br/>Backend<br/>(localhost:8000)"]
+    Frontend["Next.js Frontend<br/>Pages Router"]
+    Config["NEXT_PUBLIC_API_BASE_URL"]
+    Backend["FastAPI App Factory"]
+    Lifespan["Lifespan State<br/>shared httpx.Client<br/>DocumentSearchService"]
     Groq["Groq API<br/>(llama-3.1-8b-instant)"]
-    BM25["BM25 Search<br/>(in-memory)"]
-    Client["Any HTTP Client"]
+    Search["BM25 Index<br/>(seeded in-memory docs)"]
 
     User --> Frontend
+    Config --> Frontend
     Frontend -->|"POST /chat"| Backend
-    Client -.->|"POST /search"| Backend
-    Backend -->|"OpenAI-compatible<br/>REST API"| Groq
-    Backend --> BM25
+    Frontend -.->|"optional POST /search"| Backend
+    Backend --> Lifespan
+    Lifespan --> Groq
+    Lifespan --> Search
 ```
 
-> The frontend currently only uses `POST /chat`. The `POST /search` endpoint is available but not yet integrated into the UI.
+## Request Flow
 
-## Request Flows
+### Chat
 
-### Chat Flow (`POST /chat`)
+1. `Chat.tsx` loads `getApiConfig()` from `frontend/src/lib/config.ts`.
+2. `sendChatMessage()` in `frontend/src/lib/api.ts` sends `POST /chat` to `NEXT_PUBLIC_API_BASE_URL`.
+3. FastAPI routes read the shared `httpx.Client` from `request.app.state.http_client`.
+4. `llm_service.py` calls Groq and raises typed exceptions on timeout, upstream HTTP errors, invalid payloads, or missing local config.
+5. App-level exception handlers in `backend/app/main.py` map those exceptions to `500`, `502`, or `504`.
 
-```mermaid
-sequenceDiagram
-    participant U as User (Browser)
-    participant F as Next.js Frontend
-    participant B as FastAPI Backend
-    participant G as Groq API
+### Search
 
-    U->>F: Types message, clicks Send
-    F->>B: POST /chat {"message": "..."}
-    B->>B: Build messages array<br/>(system prompt + user message)
-    B->>G: POST /openai/v1/chat/completions<br/>model: llama-3.1-8b-instant<br/>max_tokens: 512, temperature: 0.7
-    G-->>B: {"choices": [{"message": {"content": "..."}}]}
-    B->>B: Parse response
-    B-->>F: {"response": "..."}
-    F-->>U: Display assistant message
-```
-
-### Search Flow (`POST /search`)
-
-```mermaid
-sequenceDiagram
-    participant C as Client
-    participant B as FastAPI Backend
-    participant S as BM25 Search Service
-
-    C->>B: POST /search {"query": "...", "top_k": 5}
-    B->>S: search(query, top_k)
-    S->>S: Tokenize query (whitespace split)
-    S->>S: Score documents with BM25Okapi
-    S->>S: Filter scores > 0, sort descending
-    S-->>B: [(document, score), ...]
-    B-->>C: {"query": "...", "results": [{"document": "...", "score": 0.8}]}
-```
+1. FastAPI lifespan seeds `DocumentSearchService` once at startup.
+2. Routes read `request.app.state.search_service`.
+3. `DocumentSearchService.search()` tokenizes query text with `split()`, scores via BM25, and returns positive matches sorted by score.
 
 ## Component Responsibilities
 
 | Component | Location | Responsibility |
-| --------- | -------- | -------------- |
-| **FastAPI App** | `backend/app/main.py` | App initialization, CORS middleware, router mounting |
-| **API Routes** | `backend/app/api/routes.py` | Request handling for `/chat`, `/search`, `/health` |
-| **LLM Service** | `backend/app/services/llm_service.py` | Groq API communication via httpx |
-| **Document Service** | `backend/app/services/document_service.py` | BM25-based document indexing and search |
-| **Schemas** | `backend/app/models/schemas.py` | Pydantic request/response validation |
-| **Config** | `backend/app/utils/config.py` | Environment variable loading |
-| **Chat UI** | `frontend/src/components/Chat.tsx` | Message display, user input, API calls |
-| **Pages** | `frontend/src/pages/` | Next.js page routing (single page) |
+| --- | --- | --- |
+| FastAPI app factory | `backend/app/main.py` | Builds the app, registers lifespan resources, CORS, router, and exception handlers |
+| API routes | `backend/app/api/routes.py` | Validate requests and delegate to state-managed services |
+| Exceptions | `backend/app/exceptions.py` | Typed errors for chat service failure modes |
+| LLM service | `backend/app/services/llm_service.py` | Groq request construction, parsing, and error translation |
+| Search service | `backend/app/services/document_service.py` | Seeded BM25 indexing and lookup |
+| Config helper | `backend/app/utils/config.py` | Lazy `GROQ_API_KEY` access |
+| Chat container | `frontend/src/components/Chat.tsx` | Orchestrates config, loading state, and message updates |
+| Presentational UI | `frontend/src/components/Composer.tsx`, `frontend/src/components/MessageList.tsx` | Input form and message rendering |
+| Frontend boundary | `frontend/src/lib/config.ts`, `frontend/src/lib/api.ts` | Env validation and backend fetch logic |
 
 ## Design Notes
 
-- **Groq as LLM provider** — The integration uses the OpenAI-compatible chat completions format (`/openai/v1/chat/completions`), so swapping to another OpenAI-compatible provider would require only a URL and key change.
-- **BM25 for search** — `rank-bm25` (BM25Okapi) provides keyword-based ranking with no external infrastructure. Documents are tokenized via whitespace split — no stemming or NLP pipeline.
-- **No database** — Documents live in-memory and reset on restart. This keeps the setup to a single dependency (Groq API key).
-- **Separate frontend and backend** — FastAPI provides auto-generated OpenAPI docs and Pydantic validation. Next.js provides file-based routing and a React development experience. All current endpoints are synchronous (`def`, not `async def`).
-
-## See Also
-
-- [API Reference](api-reference.md) — Detailed endpoint specifications
-- [Backend Guide](backend.md) — Deep dive into backend services
-- [Frontend Guide](frontend.md) — Frontend component architecture
-- [Configuration](configuration.md) — All configuration options
+- Endpoints remain synchronous `def` handlers. This phase optimizes correctness and service ownership, not async migration.
+- The backend still seeds five sample documents at startup; persistence and ingestion are intentionally out of scope.
+- The frontend requires explicit backend configuration instead of silently assuming a localhost port.

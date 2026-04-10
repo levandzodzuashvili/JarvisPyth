@@ -1,5 +1,4 @@
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field
 
 
 class ChatRequest(BaseModel):
@@ -17,4 +16,4 @@ class DocumentUpload(BaseModel):
 
 class SearchQuery(BaseModel):
     query: str
-    top_k: Optional[int] = 5
+    top_k: int = Field(default=5, gt=0, le=50)

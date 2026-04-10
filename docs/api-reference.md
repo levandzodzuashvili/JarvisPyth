@@ -1,113 +1,83 @@
 # API Reference
 
-The Python Jarvis backend exposes three HTTP endpoints. All request and response bodies are JSON. Successful responses return HTTP `200`.
+All endpoints are JSON. There is no authentication layer in this repository.
 
-**Authentication:** None. All endpoints are open with no API key or token required.
+Interactive docs are available from FastAPI when the backend is running:
 
-> FastAPI also auto-generates interactive API documentation:
-> - **Swagger UI:** `http://localhost:8000/docs`
-> - **ReDoc:** `http://localhost:8000/redoc`
+- Swagger UI: `http://127.0.0.1:8000/docs`
+- ReDoc: `http://127.0.0.1:8000/redoc`
 
-## Endpoints
+## `POST /chat`
 
-### `POST /chat`
+Send one message to the Groq-backed chat service.
 
-Send a message and receive an AI-generated response via the Groq LLM.
-
-**Request Body:**
-
-| Field     | Type   | Required | Description          |
-| --------- | ------ | -------- | -------------------- |
-| `message` | string | yes      | The user's message   |
-
-**Response Body:**
-
-| Field      | Type   | Description                                  |
-| ---------- | ------ | -------------------------------------------- |
-| `response` | string | AI-generated reply (or error message on failure) |
-
-**Example:**
-
-```bash
-curl -X POST http://localhost:8000/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "What is BM25?"}'
-```
+### Request
 
 ```json
 {
-  "response": "BM25 (Best Match 25) is a ranking function used in information retrieval..."
+  "message": "What is BM25?"
 }
 ```
 
-**Error behavior:** On failure, the response field contains an error string (e.g., `"Error: Request to Groq API timed out"`). The HTTP status code is still `200`.
+### Success Response
 
----
-
-### `POST /search`
-
-Search the in-memory document collection using BM25 ranking. This endpoint is not yet used by the frontend UI.
-
-**Request Body:**
-
-| Field   | Type   | Required | Default | Description                     |
-| ------- | ------ | -------- | ------- | ------------------------------- |
-| `query` | string | yes      | —       | Search query text               |
-| `top_k` | int    | no       | `5`     | Maximum number of results       |
-
-**Response Body:**
-
-| Field     | Type   | Description            |
-| --------- | ------ | ---------------------- |
-| `query`   | string | The original query     |
-| `results` | array  | Ranked search results  |
-
-Each result object:
-
-| Field      | Type   | Description                |
-| ---------- | ------ | -------------------------- |
-| `document` | string | The matched document text  |
-| `score`    | float  | BM25 relevance score       |
-
-**Example:**
-
-```bash
-curl -X POST http://localhost:8000/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "office equipment", "top_k": 3}'
-```
+`200 OK`
 
 ```json
 {
-  "query": "office equipment",
+  "response": "BM25 is a ranking function used in information retrieval..."
+}
+```
+
+### Error Responses
+
+| Status | Body | Meaning |
+| --- | --- | --- |
+| `500` | `{"detail":"Chat service is unavailable"}` | Backend is missing required chat configuration such as `GROQ_API_KEY` |
+| `504` | `{"detail":"Groq request timed out"}` | Upstream Groq call timed out |
+| `502` | `{"detail":"Groq upstream error"}` | Groq returned a non-success HTTP status |
+| `502` | `{"detail":"Invalid Groq response"}` | Groq returned an unexpected payload |
+| `500` | `{"detail":"Internal server error"}` | Unexpected server-side failure |
+
+## `POST /search`
+
+Run BM25 search against the seeded in-memory sample document set.
+
+### Request
+
+```json
+{
+  "query": "office policy",
+  "top_k": 3
+}
+```
+
+### Validation
+
+- `query` is required
+- `top_k` defaults to `5`
+- `top_k` must be an integer from `1` to `50`
+- invalid `top_k` values return FastAPI validation errors (`422`)
+
+### Success Response
+
+```json
+{
+  "query": "office policy",
   "results": [
-    {"document": "office equipment policy", "score": 1.39},
-    {"document": "office furniture policy", "score": 0.29}
+    {
+      "document": "office equipment policy",
+      "score": 0.87
+    }
   ]
 }
 ```
 
-**Note:** Only documents with a score > 0 are returned. Results are sorted by score (descending).
+Only documents with a positive BM25 score are returned.
 
-**Error behavior:** This endpoint has no error handling. If the search service fails, the server returns an HTTP `500` with a FastAPI default error body.
+## `GET /health`
 
----
-
-### `GET /health`
-
-Health check endpoint.
-
-**Response Body:**
-
-| Field    | Type   | Description     |
-| -------- | ------ | --------------- |
-| `status` | string | Always `"ok"`   |
-
-**Example:**
-
-```bash
-curl http://localhost:8000/health
-```
+Lightweight readiness check.
 
 ```json
 {
@@ -115,31 +85,14 @@ curl http://localhost:8000/health
 }
 ```
 
-## Pydantic Models
+## Seeded Sample Documents
 
-All request/response models are defined in `backend/app/models/schemas.py`.
+At startup the backend indexes five sample strings:
 
-| Model            | Fields                                 | Used By        |
-| ---------------- | -------------------------------------- | -------------- |
-| `ChatRequest`    | `message: str`                         | `POST /chat`   |
-| `ChatResponse`   | `response: str`                        | `POST /chat`   |
-| `SearchQuery`    | `query: str`, `top_k: Optional[int]=5` | `POST /search` |
-| `DocumentUpload` | `content: str`, `title: str`           | Not yet wired  |
+- `office equipment policy`
+- `office furniture policy`
+- `office travel policy`
+- `employee benefits and insurance`
+- `workplace safety guidelines`
 
-## Sample Documents
-
-The backend initializes with these sample documents in `backend/app/api/routes.py`:
-
-- `"office equipment policy"`
-- `"office furniture policy"`
-- `"office travel policy"`
-- `"employee benefits and insurance"`
-- `"workplace safety guidelines"`
-
-These are loaded into the BM25 index at startup and reset on every server restart.
-
-## See Also
-
-- [Architecture](architecture.md) — Request flow diagrams
-- [Backend Guide](backend.md) — Service implementation details
-- [Configuration](configuration.md) — CORS settings and ports
+These are seeded during FastAPI lifespan setup in `backend/app/main.py`.

@@ -12,49 +12,54 @@ Python Jarvis is an AI-powered chatbot for document analysis and Q&A. It has a F
 
 ```bash
 # Install dependencies (use a virtualenv)
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 
 # Run dev server (port 8000)
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
 # Environment setup
 cp .env.example .env   # then set GROQ_API_KEY
+
+# Test
+pytest
 ```
 
 ### Frontend (run from `frontend/`)
 
 ```bash
 npm install
+cp .env.example .env.local
 npm run dev       # Dev server (port 3000)
 npm run build     # Production build
 npm run lint      # Next.js linting
+npm run test:ci   # Jest
 ```
 
-No test framework is configured for either backend or frontend.
+Set `NEXT_PUBLIC_API_BASE_URL` in `frontend/.env.local`, for example `http://127.0.0.1:8000`.
 
 ## Architecture
 
 **Backend** (`backend/app/`): FastAPI app structured as:
-- `main.py` — App init, CORS middleware (allows localhost:3000)
-- `api/routes.py` — Three endpoints: `POST /chat`, `POST /search`, `GET /health`
-- `services/llm_service.py` — Calls Groq API (model: `llama-3.1-8b-instant`) via httpx using an OpenAI-compatible endpoint
-- `services/document_service.py` — BM25 search over in-memory sample documents (no persistence)
+- `main.py` — App factory, lifespan setup, CORS middleware, exception handlers
+- `api/routes.py` — Endpoints read shared services from `request.app.state`
+- `services/llm_service.py` — Calls Groq using a shared `httpx.Client` and raises typed exceptions
+- `services/document_service.py` — BM25 search over in-memory sample documents seeded at startup
+- `exceptions.py` — Typed chat service exceptions mapped to HTTP responses
 - `models/schemas.py` — Pydantic request/response models
-- `utils/config.py` — Loads env vars; requires `GROQ_API_KEY`
+- `utils/config.py` — Lazy `GROQ_API_KEY` accessor
 
 **Frontend** (`frontend/src/`): Next.js Pages Router with a single page:
 - `pages/index.tsx` — Renders the Chat component
-- `components/Chat.tsx` — Client component that POSTs to `http://127.0.0.1:8001/chat` and displays messages
+- `components/Chat.tsx` — Container component that checks config, manages state, and delegates rendering
+- `components/Composer.tsx` and `components/MessageList.tsx` — Presentational UI
+- `lib/config.ts` — Reads `NEXT_PUBLIC_API_BASE_URL`
+- `lib/api.ts` — Owns the chat fetch boundary and typed frontend errors
 - Uses Tailwind CSS for styling; TypeScript strict mode with `@/*` path alias mapping to `src/*`
 
-**Request flow**: User types in Chat.tsx -> POST to backend `/chat` -> backend calls Groq LLM API -> response streamed back to frontend.
+**Request flow**: User types in `Chat.tsx` -> `sendChatMessage()` calls backend `/chat` -> backend calls Groq -> app-level exception handlers map failures -> frontend renders success or a generic error state.
 
 ## Key Configuration
 
-- Backend requires `GROQ_API_KEY` env var (set in `backend/.env`)
+- Backend reads `GROQ_API_KEY` lazily; missing keys only break `/chat`
 - CORS is configured for `localhost:3000` and `127.0.0.1:3000` only
-- Backend config constants are in `backend/app/utils/config.py` (API_HOST: 127.0.0.1, API_PORT: 8000)
-
-## Known Issue
-
-The frontend Chat component calls port 8001 (`http://127.0.0.1:8001/chat`) but the backend defaults to port 8000.
+- Frontend requires `NEXT_PUBLIC_API_BASE_URL`

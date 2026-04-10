@@ -1,6 +1,6 @@
 # Python Jarvis Documentation
 
-Python Jarvis is an AI-powered chatbot application for document analysis and intelligent Q&A. It pairs a **FastAPI** backend (with Groq LLM integration and BM25 document search) with a **Next.js** TypeScript frontend.
+Python Jarvis is a small FastAPI + Next.js chat application. The backend uses a shared lifespan-managed `httpx.Client` for Groq chat calls and a seeded in-memory BM25 index for search.
 
 ## Contents
 
@@ -23,3 +23,9 @@ Python Jarvis is an AI-powered chatbot application for document analysis and int
 | Styling  | Tailwind CSS 3                      |
 | LLM      | Groq API (llama-3.1-8b-instant)    |
 | Search   | BM25 (rank-bm25)                   |
+
+## Validation
+
+- Backend tests: `cd backend && pytest`
+- Frontend lint: `cd frontend && npm run lint`
+- Frontend tests: `cd frontend && npm run test:ci`

@@ -1,99 +1,76 @@
 # Getting Started
 
-This guide walks you through setting up Python Jarvis for local development.
+This guide sets up the current stabilization baseline: FastAPI on the backend, Next.js on the frontend, typed API errors, and automated tests for both sides.
 
 ## Prerequisites
 
-- **Python 3.9+**
-- **Node.js 18+** and npm
-- **Groq API key** — obtain one from [Groq Console](https://console.groq.com)
+- Python 3.9+
+- Node.js 18+ and npm
+- Groq API key for `/chat`
 
 ## Backend Setup
 
 ```bash
 cd backend
-
-# Create and activate a virtual environment
 python -m venv venv
-source venv/bin/activate        # macOS / Linux
-# venv\Scripts\activate         # Windows
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Configure environment
+source venv/bin/activate
+pip install -r requirements-dev.txt
 cp .env.example .env
-# Edit .env and set your GROQ_API_KEY
 ```
 
-Start the backend server:
+Add `GROQ_API_KEY` to `backend/.env` if you want chat enabled.
+
+Run the API:
 
 ```bash
-uvicorn app.main:app --reload
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The API is now running at `http://localhost:8000`.
-
-### Verify the backend
+Verify the backend:
 
 ```bash
-curl http://localhost:8000/health
-# Expected: {"status":"ok"}
+curl http://127.0.0.1:8000/health
+curl -X POST http://127.0.0.1:8000/search \
+  -H "Content-Type: application/json" \
+  -d '{"query":"office"}'
 ```
 
-FastAPI also auto-generates interactive API docs:
-- Swagger UI: `http://localhost:8000/docs`
-- ReDoc: `http://localhost:8000/redoc`
+`/health` and `/search` work without a Groq key. `/chat` returns `500` with `{"detail":"Chat service is unavailable"}` until the key is configured.
 
 ## Frontend Setup
 
-In a separate terminal:
+In a second terminal:
 
 ```bash
 cd frontend
-
-# Install dependencies
 npm install
+cp .env.example .env.local
+```
 
-# Start development server
+Set `NEXT_PUBLIC_API_BASE_URL` in `frontend/.env.local`, for example:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+```
+
+Start the frontend:
+
+```bash
 npm run dev
 ```
 
-The frontend is now running at `http://localhost:3000`.
+The frontend reads `NEXT_PUBLIC_API_BASE_URL` when the Next.js dev server starts. Restart `npm run dev` after changing `.env.local`.
 
-Open your browser to `http://localhost:3000` — you should see the Python Jarvis chat interface.
+## Run the Test Suite
 
-> **Known issue:** The Chat component currently sends requests to port `8001` (`http://127.0.0.1:8001/chat`), but the backend defaults to port `8000`. Either update `frontend/src/components/Chat.tsx` to use port `8000`, or start the backend on port `8001`:
-> ```bash
-> uvicorn app.main:app --reload --port 8001
-> ```
-
-## Project Structure
-
-```
-JarvisPyth/
-├── backend/          # FastAPI Python application
-│   ├── app/
-│   │   ├── main.py           # App initialization, CORS
-│   │   ├── api/routes.py     # API endpoints
-│   │   ├── services/         # Business logic (LLM, search)
-│   │   ├── models/schemas.py # Pydantic models
-│   │   └── utils/config.py   # Configuration
-│   ├── requirements.txt
-│   └── .env.example
-├── frontend/         # Next.js TypeScript application
-│   ├── src/
-│   │   ├── components/Chat.tsx  # Main chat UI
-│   │   ├── pages/               # Next.js pages
-│   │   └── styles/              # Tailwind CSS
-│   └── package.json
-├── docs/             # This documentation
-├── README.md
-└── CLAUDE.md
+```bash
+cd backend && pytest
+cd frontend && npm run lint
+cd frontend && npm run test:ci
 ```
 
 ## Next Steps
 
-- [Architecture](architecture.md) — Understand how the system fits together
-- [API Reference](api-reference.md) — Explore the available endpoints
-- [Configuration](configuration.md) — Full environment and config details
+- [Architecture](architecture.md) explains the app factory, lifespan wiring, and request flow.
+- [API Reference](api-reference.md) documents status codes and payloads.
+- [Configuration](configuration.md) lists backend and frontend environment settings.

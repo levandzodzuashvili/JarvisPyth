@@ -1,109 +1,76 @@
 # Configuration
 
-This document covers all configuration options for both the backend and frontend.
+This project now uses explicit environment configuration on both sides of the stack. Backend settings are loaded lazily; frontend settings are read when the Next.js server or build starts.
 
-## Environment Variables
+## Backend Environment
 
-### Backend (`backend/.env`)
-
-| Variable       | Required | Default | Description                                |
-| -------------- | -------- | ------- | ------------------------------------------ |
-| `GROQ_API_KEY` | **yes**  | —       | API key for Groq LLM service. The backend will fail to start without it (`RuntimeError`). |
-
-Create the file from the template:
+Create `backend/.env` from the template:
 
 ```bash
 cd backend
 cp .env.example .env
-# Edit .env and set GROQ_API_KEY=your_key_here
 ```
 
-Environment variables are loaded by `python-dotenv` in `backend/app/utils/config.py`.
+| Variable | Required | Description |
+| --- | --- | --- |
+| `GROQ_API_KEY` | Only for `/chat` | Enables Groq-backed chat requests. Missing keys do not prevent the app from starting. |
 
-## Backend Config Constants
+If `GROQ_API_KEY` is missing:
 
-Defined in `backend/app/utils/config.py`:
+- `GET /health` still works
+- `POST /search` still works
+- `POST /chat` returns `500` with `{"detail":"Chat service is unavailable"}`
 
-| Constant   | Value         | Description              | Status  |
-| ---------- | ------------- | ------------------------ | ------- |
-| `API_HOST` | `127.0.0.1`  | Intended bind address    | Unused  |
-| `API_PORT` | `8000`        | Intended bind port       | Unused  |
+## Frontend Environment
 
-> **Note:** `API_HOST` and `API_PORT` are defined in `config.py` but not referenced by `main.py` or anywhere else in the application. The actual host and port are controlled entirely by uvicorn CLI arguments:
->
-> ```bash
-> uvicorn app.main:app --reload --host 0.0.0.0 --port 8001
-> ```
+Create `frontend/.env.local` from `frontend/.env.example`:
 
-## CORS Settings
+```bash
+cd frontend
+cp .env.example .env.local
+```
 
-Configured in `backend/app/main.py` via `CORSMiddleware`:
+| Variable | Required | Description |
+| --- | --- | --- |
+| `NEXT_PUBLIC_API_BASE_URL` | Yes | Base URL for backend requests, for example `http://127.0.0.1:8000` |
 
-| Setting              | Value                                                    |
-| -------------------- | -------------------------------------------------------- |
-| `allow_origins`      | `["http://localhost:3000", "http://127.0.0.1:3000"]`     |
-| `allow_credentials`  | `true`                                                   |
-| `allow_methods`      | `["*"]` (all HTTP methods)                               |
-| `allow_headers`      | `["*"]` (all headers)                                    |
+This value is read when `next dev` or `next build` starts. Restart the Next.js process after changing it.
 
-To allow additional origins (e.g., a deployed frontend), add them to the `origins` list in `main.py`.
+## Backend Runtime Configuration
 
-## Groq LLM Settings
+The FastAPI app is created in `backend/app/main.py` with:
 
-Configured in `backend/app/services/llm_service.py`:
+- lifespan-managed `DocumentSearchService` on `app.state.search_service`
+- one shared `httpx.Client` on `app.state.http_client`
+- typed exception handlers for chat service failures
 
-| Setting        | Value                                             |
-| -------------- | ------------------------------------------------- |
-| API endpoint   | `https://api.groq.com/openai/v1/chat/completions` |
-| Model          | `llama-3.1-8b-instant`                            |
-| Max tokens     | `512`                                             |
-| Temperature    | `0.7`                                             |
-| HTTP timeout   | `30` seconds                                      |
+The backend does not use `API_HOST` or `API_PORT` constants anymore. Host and port come from the Uvicorn command you run.
 
-These values are hardcoded in the service. To change the model or parameters, edit `llm_service.py` directly.
+## CORS
 
-## Port Assignments
+`backend/app/main.py` allows:
 
-| Service  | Default Port | URL                        |
-| -------- | ------------ | -------------------------- |
-| Backend  | 8000         | `http://localhost:8000`    |
-| Frontend | 3000         | `http://localhost:3000`    |
+- `http://localhost:3000`
+- `http://127.0.0.1:3000`
 
-> **Port mismatch:** The Chat component targets port `8001` instead of `8000`. See [Getting Started — Known issue](getting-started.md#frontend-setup) for details.
+Add more origins there if the frontend is served elsewhere.
 
-## Frontend Build Configuration
+## Groq Defaults
 
-### Next.js (`frontend/next.config.js`)
+`backend/app/services/llm_service.py` currently uses:
 
-Default configuration — no customizations.
+- endpoint: `https://api.groq.com/openai/v1/chat/completions`
+- model: `llama-3.1-8b-instant`
+- `max_tokens`: `512`
+- `temperature`: `0.7`
+- timeout: `30s`
 
-### TypeScript (`frontend/tsconfig.json`)
+## Example Local Setup
 
-| Option                           | Value        |
-| -------------------------------- | ------------ |
-| `target`                         | ES2020       |
-| `strict`                         | true         |
-| `module`                         | ESNext       |
-| `moduleResolution`               | node         |
-| `jsx`                            | preserve     |
-| `sourceMap`                      | true         |
-| `incremental`                    | true         |
-| `forceConsistentCasingInFileNames` | true       |
+```bash
+# backend
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 
-**Path alias:** `@/*` resolves to `src/*`.
-
-### Tailwind CSS (`frontend/tailwind.config.js`)
-
-- Content paths: `./src/**/*.{js,ts,jsx,tsx}`
-- Theme: default (no extensions)
-- Plugins: none
-
-### PostCSS (`frontend/postcss.config.js`)
-
-- Plugins: `tailwindcss`, `autoprefixer`
-
-## See Also
-
-- [Getting Started](getting-started.md) — Setup instructions
-- [Backend Guide](backend.md) — Service-level configuration details
-- [Frontend Guide](frontend.md) — Build tooling details
+# frontend/.env.local
+NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+```

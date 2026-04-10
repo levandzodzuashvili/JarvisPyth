@@ -24,10 +24,16 @@ Guidelines for contributing to Python Jarvis.
    npm run lint
    ```
 
-4. **Test manually** — no automated test suite is configured yet. Verify changes by:
-   - Hitting the health check: `curl http://localhost:8000/health`
-   - Testing chat through the UI or curl
-   - Checking the Swagger UI at `http://localhost:8000/docs`
+4. **Run the automated checks** before committing:
+   ```bash
+   cd backend && pytest
+   cd frontend && npm run test:ci
+   ```
+
+5. **Do a quick manual pass**:
+   - Check `curl http://127.0.0.1:8000/health`
+   - Verify the frontend is pointed at the correct `NEXT_PUBLIC_API_BASE_URL`
+   - Exercise chat from the browser with and without a configured `GROQ_API_KEY`
 
 ## Code Style
 
@@ -44,13 +50,13 @@ Guidelines for contributing to Python Jarvis.
 
 - **TypeScript strict mode** is enabled — no `any` types
 - **Tailwind CSS** for styling — no inline styles or CSS modules
-- This project uses **Pages Router** — `"use client"` is not required (see [Frontend Guide](frontend.md#adding-a-new-component))
+- This project uses **Pages Router** — `"use client"` is usually unnecessary here
 - **Path alias** `@/` for imports from `src/`
 
 ## Adding New Features
 
-- **Backend:** Schema → Service → Route. See [Backend Guide — Adding a New Endpoint](backend.md#adding-a-new-endpoint) for step-by-step examples.
-- **Frontend:** Component → Page (if needed). See [Frontend Guide — Adding a New Component](frontend.md#adding-a-new-component) for examples.
+- **Backend:** Schema → Service → Route, with shared long-lived services registered in FastAPI lifespan and accessed via `request.app.state`.
+- **Frontend:** Keep transport in `src/lib/`, keep `Chat.tsx` as the orchestrator, and move presentation into focused components when UI grows.
 
 ## Conventions
 

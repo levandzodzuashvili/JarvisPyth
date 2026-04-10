@@ -1,159 +1,86 @@
 # Python Jarvis
 
-An AI-powered chatbot application for document analysis and intelligent Q&A.
+Python Jarvis is a small FastAPI + Next.js chat application. The backend sends chat prompts to Groq and exposes a BM25 search endpoint over a seeded in-memory document set.
 
 ## Project Structure
 
-```
-python-jarvis-v1/
-├── frontend/                 # Next.js TypeScript application
-│   ├── src/
-│   │   ├── components/      # React components
-│   │   ├── pages/          # Next.js pages
-│   │   └── styles/         # CSS & Tailwind styles
-│   ├── public/             # Static assets
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── tailwind.config.js
-│   ├── postcss.config.js
-│   └── next.config.js
-├── backend/                 # FastAPI Python application
+```text
+JarvisPyth/
+├── backend/
 │   ├── app/
-│   │   ├── __init__.py
-│   │   ├── main.py         # FastAPI app initialization
-│   │   ├── api/
-│   │   │   ├── __init__.py
-│   │   │   └── routes.py   # API endpoints
-│   │   ├── services/       # Business logic
-│   │   │   ├── llm_service.py      # Groq LLM integration
-│   │   │   └── document_service.py # Document search (BM25)
+│   │   ├── api/            # FastAPI routes
+│   │   ├── exceptions.py   # Typed chat service errors
 │   │   ├── models/         # Pydantic schemas
-│   │   │   └── schemas.py
-│   │   └── utils/
-│   │       └── config.py   # Configuration
+│   │   ├── services/       # Groq client + BM25 search
+│   │   └── utils/          # Lazy configuration helpers
+│   ├── tests/
 │   ├── requirements.txt
-│   └── .env.example
-└── README.md
+│   └── requirements-dev.txt
+├── frontend/
+│   ├── src/
+│   │   ├── components/     # Chat container + presentational UI
+│   │   ├── lib/            # Frontend config + API helpers
+│   │   ├── pages/          # Next.js Pages Router
+│   │   └── styles/
+│   ├── .env.example
+│   └── package.json
+└── docs/
 ```
 
-## Getting Started
+## Quick Start
 
-### Prerequisites
-
-- Python 3.9+
-- Node.js 18+
-- npm or yarn
-- Groq API key
-
-### Backend Setup
-
-1. Navigate to backend directory:
+### Backend
 
 ```bash
 cd backend
-```
-
-2. Create a Python virtual environment:
-
-```bash
 python -m venv venv
-venv\Scripts\activate  # Windows
-# or
-source venv/bin/activate  # macOS/Linux
-```
-
-3. Install dependencies:
-
-```bash
-pip install -r requirements.txt
-```
-
-4. Set up environment variables:
-
-```bash
+source venv/bin/activate
+pip install -r requirements-dev.txt
 cp .env.example .env
-# Edit .env and add your GROQ_API_KEY
+# Add GROQ_API_KEY to enable /chat
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-5. Run the server:
+`/health` and `/search` work without `GROQ_API_KEY`. `/chat` returns `500` until the key is configured.
 
-```bash
-uvicorn app.main:app --reload
-```
-
-The API will be available at `http://localhost:8000`
-
-### Frontend Setup
-
-1. Navigate to frontend directory:
+### Frontend
 
 ```bash
 cd frontend
-```
-
-2. Install dependencies:
-
-```bash
 npm install
-```
-
-3. Run the development server:
-
-```bash
+cp .env.example .env.local
+# Edit NEXT_PUBLIC_API_BASE_URL, e.g. http://127.0.0.1:8000
 npm run dev
 ```
 
-The application will be available at `http://localhost:3000`
+The frontend reads `NEXT_PUBLIC_API_BASE_URL` when Next.js starts the dev server or builds the client bundle. Restart `npm run dev` after changing `.env.local`.
 
-## Features
+## Commands
 
-- **Chat Interface**: Real-time chatbot powered by Groq's LLM
-- **Document Search**: BM25-based document retrieval
-- **Modern UI**: Built with React, Next.js, and Tailwind CSS
-- **Type Safety**: TypeScript for both frontend and Python type hints
-- **CORS Enabled**: Seamless frontend-backend communication
+```bash
+# Backend
+cd backend && pytest
 
-## API Endpoints
-
-- `POST /chat` - Send a message and get AI response
-- `POST /search` - Search documents
-- `GET /health` - Health check endpoint
-
-## Development
-
-### Adding New Features
-
-**Backend:**
-
-1. Create new service in `app/services/`
-2. Add API route in `app/api/routes.py`
-3. Update schemas in `app/models/schemas.py`
-
-**Frontend:**
-
-1. Create new component in `src/components/`
-2. Add page in `src/pages/`
-
-## Environment Variables
-
-Create a `.env` file in the backend directory:
-
+# Frontend
+cd frontend && npm run lint
+cd frontend && npm run test:ci
 ```
-GROQ_API_KEY=your_api_key_here
-```
+
+## API Summary
+
+- `POST /chat` -> `{ "response": string }` on success
+- `POST /chat` -> `500`, `502`, or `504` with `{ "detail": string }` on failure
+- `POST /search` -> BM25 results for seeded sample documents
+- `GET /health` -> `{ "status": "ok" }`
+
+`/search` validates `top_k` as an integer from `1` to `50`, defaulting to `5`.
 
 ## Documentation
 
-Full project documentation is available in the [`docs/`](docs/index.md) folder:
-
-- [Getting Started](docs/getting-started.md) — Setup guide
-- [Architecture](docs/architecture.md) — System design and request flows
-- [API Reference](docs/api-reference.md) — Endpoint specs and examples
-- [Backend Guide](docs/backend.md) — Service layer deep dive
-- [Frontend Guide](docs/frontend.md) — Component and styling guide
-- [Configuration](docs/configuration.md) — All config options
-- [Contributing](docs/contributing.md) — Development workflow
-
-## License
-
-MIT License
+- [Getting Started](docs/getting-started.md)
+- [Architecture](docs/architecture.md)
+- [API Reference](docs/api-reference.md)
+- [Backend Guide](docs/backend.md)
+- [Frontend Guide](docs/frontend.md)
+- [Configuration](docs/configuration.md)
+- [Contributing](docs/contributing.md)

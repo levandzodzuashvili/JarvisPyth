@@ -142,6 +142,18 @@ Create a `.env` file in the backend directory:
 GROQ_API_KEY=your_api_key_here
 ```
 
+## Documentation
+
+Full project documentation is available in the [`docs/`](docs/index.md) folder:
+
+- [Getting Started](docs/getting-started.md) — Setup guide
+- [Architecture](docs/architecture.md) — System design and request flows
+- [API Reference](docs/api-reference.md) — Endpoint specs and examples
+- [Backend Guide](docs/backend.md) — Service layer deep dive
+- [Frontend Guide](docs/frontend.md) — Component and styling guide
+- [Configuration](docs/configuration.md) — All config options
+- [Contributing](docs/contributing.md) — Development workflow
+
 ## License
 
 MIT License
